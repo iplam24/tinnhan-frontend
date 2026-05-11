@@ -1,10 +1,9 @@
-// Service to handle Web Push Notifications
-// Note: Requires backend implementation to send the actual push messages
+import api from './api';
 
-const VAPID_PUBLIC_KEY = 'YOUR_VAPID_PUBLIC_KEY_HERE';
+const VAPID_PUBLIC_KEY = 'BDkjbtucY9Svh-0e4A4J6Sa37xxfek-7eI1zk7yXp9UzaZf1vPfP6MZF64KDCUhBI3mBtdegnctEXR4nomOcnos';
 
 export const pushNotificationService = {
-  async subscribeUser() {
+  async subscribeUser(userId: number) {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
       console.warn('Push notifications are not supported by this browser');
       return;
@@ -12,10 +11,10 @@ export const pushNotificationService = {
 
     try {
       const registration = await navigator.serviceWorker.ready;
-      
+
       // Check for existing subscription
       let subscription = await registration.pushManager.getSubscription();
-      
+
       if (subscription) {
         return subscription;
       }
@@ -28,9 +27,15 @@ export const pushNotificationService = {
       });
 
       console.log('User is subscribed:', subscription);
-      // TODO: Send this subscription object to your backend to store it
-      // await api.post('/push/subscribe', subscription);
-      
+
+      const subJSON = subscription.toJSON();
+      await api.post('/push/subscribe', {
+        userId: userId,
+        endpoint: subJSON.endpoint,
+        p256dh: subJSON.keys?.p256dh,
+        auth: subJSON.keys?.auth
+      });
+
       return subscription;
     } catch (err) {
       console.error('Failed to subscribe the user: ', err);

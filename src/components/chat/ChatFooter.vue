@@ -38,11 +38,6 @@ const message = computed({
       <input
         type="text"
         v-model="message"
-        placeholder="Aa"
-        autocomplete="off"
-        autocorrect="off"
-        autocapitalize="none"
-        spellcheck="false"
         @input="emit('typing')"
         @keyup.enter="emit('send')"
       />

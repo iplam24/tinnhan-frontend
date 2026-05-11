@@ -62,6 +62,12 @@ onMounted(async () => {
     chatStore.clearUnread(contactId);
     chatStore.setCurrentContact(contactId);
     chatStore.initWebSocket();
+    // Auto-subscribe to background notifications if possible
+    if (auth.user?.id) {
+      setTimeout(() => {
+        import('@/services/pushNotificationService').then(m => m.pushNotificationService.subscribeUser(auth.user!.id));
+      }, 2000); // Wait a bit after mount
+    }
   }
 
   // Keyboard and Viewport handling
