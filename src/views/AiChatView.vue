@@ -20,10 +20,10 @@ const scrollContainer = ref<HTMLElement | null>(null);
 
 const isUpgraded = computed(() => {
   if (!auth.user?.roles) return false;
-  // If user has any role other than ROLE_USER, they are upgraded
+  // AI access requires PROMAX or ADMIN role
   return auth.user.roles.some((r: any) => {
     const roleName = typeof r === 'string' ? r : (r.name || '');
-    return roleName !== 'ROLE_USER';
+    return roleName === 'ROLE_PROMAX' || roleName === 'ROLE_ADMIN';
   });
 });
 
@@ -133,7 +133,7 @@ const goBack = () => router.push('/');
         </div>
         <h3>Tính năng dành cho Hội viên</h3>
         <p>Vui lòng nâng cấp tài khoản của bạn để sử dụng V-Edu AI và nhiều tính năng cao cấp khác.</p>
-        <a href="https://vuxuanlam.me/upgrade" target="_blank" class="upgrade-link-btn">
+        <a href="https://vuxuanlam.me/pricing" target="_blank" class="upgrade-link-btn">
           Nâng cấp ngay
         </a>
         <button class="not-now-btn" @click="goBack">Để sau</button>

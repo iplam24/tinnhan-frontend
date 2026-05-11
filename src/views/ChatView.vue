@@ -28,6 +28,7 @@ const contact = ref<any>(null);
 const messages = computed(() => chatStore.messages[contactId] || []);
 const newMessage = ref('');
 const isTyping = ref(false);
+const isKeyboardOpen = ref(false);
 const scrollContainer = ref<HTMLElement | null>(null);
 let typingTimeout: any = null;
 
@@ -83,9 +84,10 @@ onMounted(async () => {
         
         const chatView = document.querySelector('.chat-view') as HTMLElement;
         if (chatView) {
+          isKeyboardOpen.value = viewport.height < window.innerHeight - 50;
           chatView.style.height = `${viewport.height}px`;
-          // Scroll to bottom when keyboard opens
-          if (viewport.height < window.innerHeight) {
+          
+          if (isKeyboardOpen.value) {
             scrollToBottom();
           }
         }
@@ -189,7 +191,7 @@ const resolveImageUrl = (url?: string | null) => {
 </script>
 
 <template>
-  <div class="chat-view">
+  <div class="chat-view" :class="{ 'keyboard-open': isKeyboardOpen }">
     <!-- Chat Header -->
     <header class="chat-header">
       <div class="header-left">
@@ -553,6 +555,11 @@ const resolveImageUrl = (url?: string | null) => {
   padding-bottom: calc(25px + env(safe-area-inset-bottom, 0px));
   background: white;
   border-top: 1px solid var(--messenger-light-gray);
+  transition: padding-bottom 0.1s ease;
+}
+
+.chat-view.keyboard-open .chat-footer {
+  padding-bottom: 8px;
 }
 
 .footer-actions {
