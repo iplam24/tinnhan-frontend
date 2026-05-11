@@ -49,6 +49,10 @@ const emit = defineEmits(['back']);
 
 <style scoped>
 .chat-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -58,8 +62,7 @@ const emit = defineEmits(['back']);
   background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  flex-shrink: 0;
-  z-index: 20;
+  z-index: 1000;
   min-height: 56px;
 }
 

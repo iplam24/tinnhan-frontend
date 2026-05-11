@@ -74,10 +74,19 @@ onMounted(async () => {
       isKeyboardOpen.value = window.innerHeight - vpH > 80;
 
       const chatView = document.querySelector('.chat-view') as HTMLElement;
+      const chatHeader = document.querySelector('.chat-header') as HTMLElement;
+
       if (chatView) {
-        // Resize and reposition container to match visible area exactly
-        chatView.style.height = `${vpH}px`;
-        chatView.style.top = `${vpTop}px`;
+        requestAnimationFrame(() => {
+          chatView.style.height = `${vpH}px`;
+          chatView.style.top = `${vpTop}px`;
+          
+          if (chatHeader) {
+            chatHeader.style.top = `${vpTop}px`;
+          }
+
+          if (window.pageYOffset > 0) window.scrollTo(0, 0);
+        });
       }
 
       if (isKeyboardOpen.value) {
@@ -168,6 +177,8 @@ const messagesPaddingBottom = computed(() => `10px`);
       :resolve-image-url="resolveImageUrl" 
       @back="goBack" 
     />
+    <!-- Spacer to push content below fixed header -->
+    <div style="height: 56px; flex-shrink: 0;"></div>
 
     <MessageList 
       ref="messageListRef"
@@ -201,7 +212,9 @@ const messagesPaddingBottom = computed(() => `10px`);
   flex-direction: column;
   background: white;
   overflow: hidden;
-  /* Prevent browser from scrolling the window */
   overscroll-behavior: none;
+  /* Hardware acceleration to reduce flickering */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
 }
 </style>
