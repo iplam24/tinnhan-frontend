@@ -74,10 +74,36 @@ onMounted(async () => {
           scrollToBottom();
       }
     };
-    
-    onUnmounted(() => {
+
+    // Fix for mobile keyboard layout jumping
+    if (window.visualViewport) {
+      const handleViewportChange = () => {
+        const viewport = window.visualViewport;
+        if (!viewport) return;
+        
+        const chatView = document.querySelector('.chat-view') as HTMLElement;
+        if (chatView) {
+          chatView.style.height = `${viewport.height}px`;
+          // Scroll to bottom when keyboard opens
+          if (viewport.height < window.innerHeight) {
+            scrollToBottom();
+          }
+        }
+      };
+
+      window.visualViewport.addEventListener('resize', handleViewportChange);
+      window.visualViewport.addEventListener('scroll', handleViewportChange);
+      
+      onUnmounted(() => {
+        window.visualViewport?.removeEventListener('resize', handleViewportChange);
+        window.visualViewport?.removeEventListener('scroll', handleViewportChange);
         chatStore.setCurrentContact(null);
-    });
+      });
+    } else {
+      onUnmounted(() => {
+          chatStore.setCurrentContact(null);
+      });
+    }
   }
 });
 
@@ -267,10 +293,15 @@ const resolveImageUrl = (url?: string | null) => {
 
 <style scoped>
 .chat-view {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
   flex-direction: column;
-  height: 100%;
   background: white;
+  overflow: hidden;
 }
 
 .chat-header {
@@ -519,6 +550,7 @@ const resolveImageUrl = (url?: string | null) => {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
+  padding-bottom: calc(25px + env(safe-area-inset-bottom, 0px));
   background: white;
   border-top: 1px solid var(--messenger-light-gray);
 }
@@ -552,7 +584,7 @@ const resolveImageUrl = (url?: string | null) => {
   border: none;
   outline: none;
   padding: 8px 0;
-  font-size: 15px;
+  font-size: 16px;
 }
 
 .emoji-btn {

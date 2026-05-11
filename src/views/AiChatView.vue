@@ -271,6 +271,7 @@ const goBack = () => router.push('/');
 
 .footer {
   padding: 12px 16px;
+  padding-bottom: calc(30px + env(safe-area-inset-bottom, 0px));
   background: white;
   border-top: 1px solid #e4e6eb;
 }

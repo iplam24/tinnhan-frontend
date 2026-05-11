@@ -559,13 +559,15 @@ const resolveImageUrl = (url?: string | null) => {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 60px;
+  height: calc(85px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(10px);
   display: flex;
   justify-content: space-around;
   align-items: center;
   border-top: 1px solid var(--messenger-light-gray);
+  z-index: 100;
 }
 
 .nav-item {
@@ -588,7 +590,7 @@ const resolveImageUrl = (url?: string | null) => {
 
 .meta-ai-btn {
   position: fixed;
-  bottom: 80px;
+  bottom: calc(105px + env(safe-area-inset-bottom, 0px));
   right: 16px;
   background: white;
   border: none;
