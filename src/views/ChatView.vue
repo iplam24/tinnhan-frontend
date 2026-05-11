@@ -70,7 +70,7 @@ onMounted(async () => {
     const onTyping = (typing: any) => {
       console.log('⌨️ [ChatView] Typing received:', typing);
       if (Number(typing.senderId) === contactId) {
-          isTyping.value = typing.isTyping;
+          isTyping.value = typing.typing || typing.isTyping;
           scrollToBottom();
       }
     };
