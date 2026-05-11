@@ -87,10 +87,11 @@ onMounted(async () => {
 
       const chatView = document.querySelector('.chat-view') as HTMLElement;
       if (chatView) {
-        // Set height to actual visible height to prevent browser scrolling
-        chatView.style.height = `${viewportHeight}px`;
-        // Ensure it stays at the top
-        chatView.style.top = `${viewportOffsetTop}px`;
+        // Move the bottom of the container up when keyboard is open
+        const hiddenBottom = windowHeight - (viewportOffsetTop + viewportHeight);
+        chatView.style.bottom = `${hiddenBottom}px`;
+        // Keep top at 0 or offsetTop
+        chatView.style.top = `0px`; 
       }
 
       if (isKeyboardOpen.value) {
@@ -319,7 +320,10 @@ const resolveImageUrl = (url?: string | null) => {
 /* ── Base ─────────────────────────────────────────────────────────────── */
 .chat-view {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
   flex-direction: column;
   background: white;
@@ -563,15 +567,12 @@ const resolveImageUrl = (url?: string | null) => {
 
 /* ── Footer ───────────────────────────────────────────────────────────── */
 .chat-footer {
-  position: fixed;
-  left: 0;
-  right: 0;
-  /* bottom is set dynamically via :style to float above the keyboard */
+  /* relative to .chat-view */
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 8px 10px;
-  padding-bottom: max(50px, env(safe-area-inset-bottom));
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
   background: white;
   border-top: 1px solid var(--messenger-light-gray);
   z-index: 30;
