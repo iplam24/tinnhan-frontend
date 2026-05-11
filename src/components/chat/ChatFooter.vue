@@ -65,11 +65,12 @@ const message = computed({
   align-items: center;
   gap: 6px;
   padding: 8px 10px;
-  padding-bottom: max(10px, env(safe-area-inset-bottom));
+  padding-bottom: max(50px, env(safe-area-inset-bottom));
   background: white;
   border-top: 1px solid var(--messenger-light-gray, #e4e6eb);
   z-index: 30;
   flex-shrink: 0;
+  min-height: 52px;
 }
 
 .chat-footer.keyboard-open {
