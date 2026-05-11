@@ -82,13 +82,16 @@ onMounted(async () => {
       const viewportHeight = viewport.height;
       const viewportOffsetTop = viewport.offsetTop;
 
-      // Keyboard is open when viewport is significantly shorter than window
-      isKeyboardOpen.value = viewportHeight < windowHeight * 0.85;
+      // Keyboard detection
+      isKeyboardOpen.value = viewportHeight < windowHeight * 0.9;
 
-      // Move the footer up so it sits just above the keyboard
-      // offsetTop accounts for any browser chrome at the top
-      const hiddenBottom = windowHeight - (viewportOffsetTop + viewportHeight);
-      footerBottom.value = Math.max(0, hiddenBottom);
+      const chatView = document.querySelector('.chat-view') as HTMLElement;
+      if (chatView) {
+        // Set height to actual visible height to prevent browser scrolling
+        chatView.style.height = `${viewportHeight}px`;
+        // Ensure it stays at the top
+        chatView.style.top = `${viewportOffsetTop}px`;
+      }
 
       if (isKeyboardOpen.value) {
         scrollToBottom(true);
@@ -265,7 +268,6 @@ const resolveImageUrl = (url?: string | null) => {
     -->
     <footer
       class="chat-footer"
-      :style="{ bottom: footerBottom + 'px' }"
       :class="{ 'keyboard-open': isKeyboardOpen }"
     >
       <!-- Media actions: hidden when keyboard is open -->
