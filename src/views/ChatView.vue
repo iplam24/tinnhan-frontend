@@ -38,12 +38,19 @@ const requestNotificationPermission = () => {
   }
 };
 
-const scrollToBottom = async () => {
+const scrollToBottom = async (smooth = false) => {
   await nextTick();
   if (scrollContainer.value) {
-    scrollContainer.value.scrollTop = scrollContainer.value.scrollHeight;
+    scrollContainer.value.scrollTo({
+      top: scrollContainer.value.scrollHeight,
+      behavior: smooth ? 'smooth' : 'auto'
+    });
   }
 };
+
+watch(messages, () => {
+  scrollToBottom(true);
+}, { deep: true });
 
 onMounted(async () => {
   requestNotificationPermission();
@@ -67,47 +74,37 @@ onMounted(async () => {
     chatStore.setCurrentContact(contactId);
 
     chatStore.initWebSocket();
+  }
 
-    const onTyping = (typing: any) => {
-      console.log('⌨️ [ChatView] Typing received:', typing);
-      if (Number(typing.senderId) === contactId) {
-          isTyping.value = typing.typing || typing.isTyping;
-          scrollToBottom();
+  // Keyboard and Viewport handling
+  const viewport = window.visualViewport;
+  if (viewport) {
+    const handler = () => {
+      isKeyboardOpen.value = viewport.height < window.innerHeight;
+      // When keyboard opens, scroll to bottom
+      if (isKeyboardOpen.value) {
+        scrollToBottom();
       }
     };
-
-    // Fix for mobile keyboard layout jumping
-    if (window.visualViewport) {
-      const handleViewportChange = () => {
-        const viewport = window.visualViewport;
-        if (!viewport) return;
-        
-        const chatView = document.querySelector('.chat-view') as HTMLElement;
-        if (chatView) {
-          isKeyboardOpen.value = viewport.height < window.innerHeight - 50;
-          chatView.style.height = `${viewport.height}px`;
-          
-          if (isKeyboardOpen.value) {
-            scrollToBottom();
-          }
-        }
-      };
-
-      window.visualViewport.addEventListener('resize', handleViewportChange);
-      window.visualViewport.addEventListener('scroll', handleViewportChange);
-      
-      onUnmounted(() => {
-        window.visualViewport?.removeEventListener('resize', handleViewportChange);
-        window.visualViewport?.removeEventListener('scroll', handleViewportChange);
-        chatStore.setCurrentContact(null);
-      });
-    } else {
-      onUnmounted(() => {
-          chatStore.setCurrentContact(null);
-      });
-    }
+    viewport.addEventListener('resize', handler);
+    onUnmounted(() => {
+      viewport.removeEventListener('resize', handler);
+    });
   }
 });
+
+onUnmounted(() => {
+  chatStore.setCurrentContact(null);
+});
+
+// Auto-scroll when keyboard might open
+const handleFocus = () => {
+    // Keyboard state is handled by Visual Viewport listener
+};
+
+const handleBlur = () => {
+    // Keyboard state is handled by Visual Viewport listener
+};
 
 const shouldShowAvatar = (index: number) => {
     if (index === messages.value.length - 1) return true;
@@ -275,11 +272,13 @@ const resolveImageUrl = (url?: string | null) => {
       </div>
       <div class="input-container">
         <input 
-            type="text" 
-            v-model="newMessage" 
-            placeholder="Aa" 
-            @keyup.enter="sendMessage"
-            @input="handleTyping"
+          type="text" 
+          v-model="newMessage" 
+          placeholder="Aa" 
+          @input="handleTyping"
+          @keyup.enter="sendMessage"
+          @focus="handleFocus"
+          @blur="handleBlur"
         />
         <button class="emoji-btn"><Smile :size="24" /></button>
       </div>
@@ -296,10 +295,7 @@ const resolveImageUrl = (url?: string | null) => {
 <style scoped>
 .chat-view {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   display: flex;
   flex-direction: column;
   background: white;
@@ -314,8 +310,7 @@ const resolveImageUrl = (url?: string | null) => {
   border-bottom: 1px solid var(--messenger-light-gray);
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(10px);
-  position: sticky;
-  top: 0;
+  flex-shrink: 0;
   z-index: 10;
 }
 
@@ -552,10 +547,10 @@ const resolveImageUrl = (url?: string | null) => {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  padding-bottom: calc(25px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 8px);
   background: white;
   border-top: 1px solid var(--messenger-light-gray);
-  transition: padding-bottom 0.1s ease;
+  flex-shrink: 0;
 }
 
 .chat-view.keyboard-open .chat-footer {
