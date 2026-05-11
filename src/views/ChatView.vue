@@ -29,7 +29,7 @@ const messages = computed(() => chatStore.messages[contactId] || []);
 const newMessage = ref('');
 const isTyping = ref(false);
 const isKeyboardOpen = ref(false);
-const footerBottom = ref(0);
+const keyboardHeight = ref(0);
 const scrollContainer = ref<HTMLElement | null>(null);
 let typingTimeout: any = null;
 
@@ -49,9 +49,7 @@ const scrollToBottom = async (smooth = false) => {
   }
 };
 
-watch(messages, () => {
-  scrollToBottom(true);
-}, { deep: true });
+watch(messages, () => scrollToBottom(true), { deep: true });
 
 onMounted(async () => {
   requestNotificationPermission();
@@ -63,7 +61,6 @@ onMounted(async () => {
     } catch (err) {
       console.error('Failed to load contact profile:', err);
     }
-
     if (messages.value.length === 0) {
       const history = await chatService.getHistory(user.id, contactId);
       history.forEach((msg: any) => chatStore.addMessage(contactId, msg));
@@ -74,44 +71,32 @@ onMounted(async () => {
     chatStore.initWebSocket();
   }
 
-  // ── Visual Viewport: track keyboard open/close ──────────────────────────
+  // ── Visual Viewport: keyboard detection ─────────────────────────────
+  // We NEVER touch .chat-view dimensions. Only footer `bottom` and
+  // messages `padding-bottom` are adjusted — no layout reflow, no jump.
   const viewport = window.visualViewport;
   if (viewport) {
     const handler = () => {
-      const windowHeight = window.innerHeight;
-      const viewportHeight = viewport.height;
-      const viewportOffsetTop = viewport.offsetTop;
+      const winH  = window.innerHeight;
+      const vpH   = viewport!.height;
+      const vpTop = viewport!.offsetTop;
+      const hidden = Math.max(0, winH - (vpTop + vpH));
 
-      // Keyboard detection
-      isKeyboardOpen.value = viewportHeight < windowHeight * 0.9;
+      keyboardHeight.value = hidden;
+      isKeyboardOpen.value = hidden > 80;
 
-      const chatView = document.querySelector('.chat-view') as HTMLElement;
-      if (chatView) {
-        // Move the bottom of the container up when keyboard is open
-        const hiddenBottom = windowHeight - (viewportOffsetTop + viewportHeight);
-        chatView.style.bottom = `${hiddenBottom}px`;
-        // Keep top at 0 or offsetTop
-        chatView.style.top = `0px`; 
-      }
-
-      if (isKeyboardOpen.value) {
-        scrollToBottom(true);
-      }
+      if (isKeyboardOpen.value) scrollToBottom(true);
     };
-
     viewport.addEventListener('resize', handler);
     viewport.addEventListener('scroll', handler);
-
     onUnmounted(() => {
-      viewport.removeEventListener('resize', handler);
-      viewport.removeEventListener('scroll', handler);
+      viewport!.removeEventListener('resize', handler);
+      viewport!.removeEventListener('scroll', handler);
     });
   }
 });
 
-onUnmounted(() => {
-  chatStore.setCurrentContact(null);
-});
+onUnmounted(() => chatStore.setCurrentContact(null));
 
 const shouldShowAvatar = (index: number) => {
   if (index === messages.value.length - 1) return true;
@@ -121,11 +106,8 @@ const shouldShowAvatar = (index: number) => {
 const handleTyping = () => {
   const user = auth.user;
   if (!user) return;
-
   if (typingTimeout) clearTimeout(typingTimeout);
-
   chatService.sendTyping({ senderId: user.id, receiverId: contactId, isTyping: true });
-
   typingTimeout = setTimeout(() => {
     chatService.sendTyping({ senderId: user.id, receiverId: contactId, isTyping: false });
     typingTimeout = null;
@@ -135,13 +117,11 @@ const handleTyping = () => {
 const sendMessage = () => {
   const user = auth.user;
   if (!newMessage.value.trim() || !user) return;
-
   if (typingTimeout) {
     clearTimeout(typingTimeout);
     chatService.sendTyping({ senderId: user.id, receiverId: contactId, isTyping: false });
     typingTimeout = null;
   }
-
   const msg = {
     senderId: user.id,
     senderName: user.fullName || user.username,
@@ -149,7 +129,6 @@ const sendMessage = () => {
     content: newMessage.value,
     timestamp: new Date().toISOString()
   };
-
   chatService.sendMessage(msg);
   chatStore.addMessage(contactId, msg);
   newMessage.value = '';
@@ -181,25 +160,53 @@ const resolveImageUrl = (url?: string | null) => {
   const cleanPath = url.startsWith('/') ? url : `/${url}`;
   return `${origin}${cleanPath}`;
 };
+
+// Footer height: 8px top padding + ~42px input + 8px bottom padding = 58px
+const FOOTER_H = 58;
+
+// Scroll area bottom padding = footer height + keyboard height + small gap
+const messagesPaddingBottom = computed(() =>
+  `${FOOTER_H + keyboardHeight.value + 8}px`
+);
+
+// Footer floats above the keyboard
+const footerBottomStyle = computed(() => `${keyboardHeight.value}px`);
 </script>
 
 <template>
   <div class="chat-view">
+
     <!-- ── Header ─────────────────────────────────────────────────────── -->
     <header class="chat-header">
       <div class="header-left">
-        <button class="back-btn" @click="goBack"><ChevronLeft :size="28" /></button>
-        <div class="contact-info" v-if="contact">
+        <button class="back-btn" @click="goBack">
+          <ChevronLeft :size="28" />
+        </button>
+
+        <!-- Skeleton until contact loads -->
+        <div v-if="!contact" class="contact-info">
+          <div class="header-avatar placeholder skeleton-pulse"></div>
+          <div class="header-text">
+            <span class="skeleton-bar" style="width:100px;height:13px;border-radius:6px;display:block"></span>
+            <span class="skeleton-bar" style="width:64px;height:10px;border-radius:4px;display:block;margin-top:5px"></span>
+          </div>
+        </div>
+
+        <!-- Loaded -->
+        <div v-else class="contact-info">
           <div v-if="!contact.avatar" class="header-avatar placeholder">
             <User :size="20" />
           </div>
-          <img v-else :src="resolveImageUrl(contact.avatar)" class="header-avatar" />
+          <img v-else :src="resolveImageUrl(contact.avatar)" class="header-avatar" alt="" />
           <div class="header-text">
             <span class="contact-name">{{ contact.fullName || contact.username }}</span>
-            <span class="status-text">{{ contact.online ? 'Đang hoạt động' : 'Ngoại tuyến' }}</span>
+            <span class="status-text">
+              {{ contact.online ? 'Đang hoạt động' : 'Ngoại tuyến' }}
+            </span>
           </div>
         </div>
       </div>
+
       <div class="header-right">
         <button class="header-icon"><Phone :size="22" /></button>
         <button class="header-icon"><Video :size="22" /></button>
@@ -210,13 +217,13 @@ const resolveImageUrl = (url?: string | null) => {
     <div
       class="messages-container"
       ref="scrollContainer"
-      :style="{ paddingBottom: isKeyboardOpen ? '64px' : '80px' }"
+      :style="{ paddingBottom: messagesPaddingBottom }"
     >
       <div v-if="contact" class="chat-intro">
         <div v-if="!contact.avatar" class="intro-avatar placeholder">
           <User :size="40" />
         </div>
-        <img v-else :src="resolveImageUrl(contact.avatar)" class="intro-avatar" />
+        <img v-else :src="resolveImageUrl(contact.avatar)" class="intro-avatar" alt="" />
         <h2 class="intro-name">{{ contact.fullName || contact.username }}</h2>
         <p class="intro-sub">Các bạn là bạn bè trên Messenger</p>
         <button class="view-profile">XEM TRANG CÁ NHÂN</button>
@@ -228,12 +235,12 @@ const resolveImageUrl = (url?: string | null) => {
         class="message-row"
         :class="{ self: Number(msg.senderId) === Number(auth.user?.id) }"
       >
-        <template v-if="msg.senderId !== auth.user?.id">
+        <template v-if="Number(msg.senderId) !== Number(auth.user?.id)">
           <div v-if="shouldShowAvatar(index)" class="msg-avatar-placeholder">
             <div v-if="!contact?.avatar" class="msg-avatar placeholder">
               <User :size="14" />
             </div>
-            <img v-else :src="resolveImageUrl(contact?.avatar)" class="msg-avatar" />
+            <img v-else :src="resolveImageUrl(contact?.avatar)" class="msg-avatar" alt="" />
           </div>
           <div v-else class="msg-avatar-spacer"></div>
         </template>
@@ -243,19 +250,16 @@ const resolveImageUrl = (url?: string | null) => {
         </div>
       </div>
 
-      <!-- Typing Indicator -->
       <transition name="fade-slide">
-        <div v-if="isTyping" class="message-row typing-row">
-          <div v-if="!contact?.avatar" class="msg-avatar-placeholder">
-            <div class="msg-avatar placeholder">
+        <div v-if="isTyping" class="message-row">
+          <div class="msg-avatar-placeholder">
+            <div v-if="!contact?.avatar" class="msg-avatar placeholder">
               <User :size="14" />
             </div>
+            <img v-else :src="resolveImageUrl(contact?.avatar)" class="msg-avatar" alt="" />
           </div>
-          <img v-else :src="resolveImageUrl(contact?.avatar)" class="msg-avatar" />
           <div class="message-bubble typing">
-            <span class="dot"></span>
-            <span class="dot"></span>
-            <span class="dot"></span>
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
           </div>
         </div>
       </transition>
@@ -263,15 +267,15 @@ const resolveImageUrl = (url?: string | null) => {
 
     <!-- ── Footer ─────────────────────────────────────────────────────── -->
     <!--
-      footerBottom: pixel gap between footer bottom edge and window bottom.
-      When keyboard is open this equals the keyboard height, so the footer
-      floats just above it regardless of safe-area or browser chrome.
+      position:fixed keeps footer OUT of the flex flow completely.
+      `bottom` = keyboardHeight so it always sits right above the keyboard.
+      .chat-view itself NEVER changes — no reflow, no layout jumps.
     -->
     <footer
       class="chat-footer"
+      :style="{ bottom: footerBottomStyle }"
       :class="{ 'keyboard-open': isKeyboardOpen }"
     >
-      <!-- Media actions: hidden when keyboard is open -->
       <transition name="actions-slide">
         <div v-if="!isKeyboardOpen" class="footer-actions">
           <button class="action-btn"><PlusCircle :size="24" /></button>
@@ -281,12 +285,7 @@ const resolveImageUrl = (url?: string | null) => {
         </div>
       </transition>
 
-      <!-- Collapsed action toggle when keyboard is open -->
-      <button
-        v-if="isKeyboardOpen"
-        class="action-btn collapse-toggle"
-        @click="isKeyboardOpen = false"
-      >
+      <button v-if="isKeyboardOpen" class="action-btn">
         <PlusCircle :size="22" />
       </button>
 
@@ -301,7 +300,6 @@ const resolveImageUrl = (url?: string | null) => {
         <button class="emoji-btn"><Smile :size="22" /></button>
       </div>
 
-      <!-- Send button: always visible when keyboard open OR when has text -->
       <button
         v-if="newMessage.length > 0 || isKeyboardOpen"
         class="send-btn"
@@ -313,17 +311,18 @@ const resolveImageUrl = (url?: string | null) => {
         <Heart :size="22" fill="red" color="red" />
       </button>
     </footer>
+
   </div>
 </template>
 
 <style scoped>
-/* ── Base ─────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════
+   ROOT — fixed, never resized.  Keyboard adjustments happen only on
+   the footer (position:fixed bottom) and padding-bottom of the scroller.
+   ═══════════════════════════════════════════════════════════════════════ */
 .chat-view {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   display: flex;
   flex-direction: column;
   background: white;
@@ -337,68 +336,58 @@ const resolveImageUrl = (url?: string | null) => {
   align-items: center;
   padding: 8px 12px;
   padding-top: max(8px, env(safe-area-inset-top));
-  border-bottom: 1px solid var(--messenger-light-gray);
-  background: rgba(255, 255, 255, 0.92);
+  border-bottom: 1px solid var(--messenger-light-gray, #e4e6eb);
+  background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   flex-shrink: 0;
   z-index: 20;
+  min-height: 56px; /* stable height before contact loads */
 }
 
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
+.header-left  { display: flex; align-items: center; gap: 4px; }
+.header-right { display: flex; gap: 12px; }
 
 .back-btn {
-  background: transparent;
-  border: none;
-  color: var(--messenger-blue);
-  cursor: pointer;
-  padding: 4px;
+  background: transparent; border: none;
+  color: var(--messenger-blue, #0084ff);
+  cursor: pointer; padding: 4px;
   -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
 }
 
-.contact-info {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
+.contact-info { display: flex; align-items: center; gap: 10px; }
 
 .header-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  object-fit: cover;
+  width: 36px; height: 36px;
+  border-radius: 50%; object-fit: cover; flex-shrink: 0;
 }
 
-.header-text {
-  display: flex;
-  flex-direction: column;
-}
-
-.contact-name {
-  font-weight: 700;
-  font-size: 15px;
-}
-
-.status-text {
-  font-size: 11px;
-  color: var(--messenger-gray);
-}
-
-.header-right {
-  display: flex;
-  gap: 12px;
-}
+.header-text  { display: flex; flex-direction: column; }
+.contact-name { font-weight: 700; font-size: 15px; }
+.status-text  { font-size: 11px; color: var(--messenger-gray, #65676b); }
 
 .header-icon {
-  background: transparent;
-  border: none;
-  color: var(--messenger-blue);
+  background: transparent; border: none;
+  color: var(--messenger-blue, #0084ff);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Skeleton shimmer */
+.skeleton-pulse {
+  background: linear-gradient(90deg, #f0f2f5 25%, #e4e6eb 50%, #f0f2f5 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+}
+.skeleton-bar {
+  background: linear-gradient(90deg, #f0f2f5 25%, #e4e6eb 50%, #f0f2f5 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+}
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
 /* ── Messages ─────────────────────────────────────────────────────────── */
@@ -407,62 +396,42 @@ const resolveImageUrl = (url?: string | null) => {
   overflow-y: auto;
   overflow-x: hidden;
   padding: 16px;
-  /* padding-bottom set dynamically via :style */
   display: flex;
   flex-direction: column;
   gap: 12px;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+  /* padding-bottom driven by computed prop to clear the fixed footer */
 }
 
 .chat-intro {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 30px 0;
+  display: flex; flex-direction: column;
+  align-items: center; padding: 30px 0 16px;
   text-align: center;
 }
 
 .intro-avatar {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  margin-bottom: 12px;
-  object-fit: cover;
+  width: 80px; height: 80px;
+  border-radius: 50%; object-fit: cover; margin-bottom: 12px;
 }
 
-.intro-name {
-  font-size: 20px;
-  font-weight: 700;
-  margin-bottom: 4px;
-}
-
-.intro-sub {
-  font-size: 13px;
-  color: var(--messenger-gray);
-  margin-bottom: 16px;
-}
+.intro-name { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+.intro-sub  { font-size: 13px; color: var(--messenger-gray, #65676b); margin-bottom: 16px; }
 
 .view-profile {
-  background: var(--messenger-light-gray);
-  border: none;
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-weight: 600;
-  font-size: 12px;
-  cursor: pointer;
+  background: var(--messenger-light-gray, #f0f2f5);
+  border: none; padding: 6px 12px; border-radius: 6px;
+  font-weight: 600; font-size: 12px; cursor: pointer;
 }
 
 .message-row {
-  display: flex;
-  gap: 8px;
-  align-items: flex-end;
+  display: flex; gap: 8px; align-items: flex-end;
   max-width: 80%;
-  animation: messageSlideIn 0.25s cubic-bezier(0.18, 0.89, 0.32, 1.2) forwards;
+  animation: msgIn 0.22s cubic-bezier(0.18, 0.89, 0.32, 1.15) forwards;
 }
 
-@keyframes messageSlideIn {
-  from { opacity: 0; transform: translateY(8px); }
+@keyframes msgIn {
+  from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
@@ -472,51 +441,38 @@ const resolveImageUrl = (url?: string | null) => {
 }
 
 .msg-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  object-fit: cover;
-  flex-shrink: 0;
-  margin-bottom: 2px;
+  width: 28px; height: 28px;
+  border-radius: 50%; object-fit: cover;
+  flex-shrink: 0; margin-bottom: 2px;
 }
 
 .msg-avatar-placeholder {
-  width: 28px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: flex-end;
+  width: 28px; flex-shrink: 0;
+  display: flex; align-items: flex-end;
 }
 
-.msg-avatar-spacer {
-  width: 28px;
-  flex-shrink: 0;
-}
+.msg-avatar-spacer { width: 28px; flex-shrink: 0; }
 
 .message-bubble {
-  padding: 8px 12px;
-  border-radius: 18px;
-  font-size: 15px;
-  line-height: 1.4;
-  word-break: break-word;
-  max-width: 100%;
+  padding: 8px 12px; border-radius: 18px;
+  font-size: 15px; line-height: 1.4;
+  word-break: break-word; max-width: 100%;
 }
 
 .message-row.self .message-bubble {
-  background: var(--messenger-bubble-self);
-  color: white;
-  border-bottom-right-radius: 4px;
+  background: var(--messenger-bubble-self, #0084ff);
+  color: white; border-bottom-right-radius: 4px;
 }
 
 .message-row:not(.self) .message-bubble {
-  background: var(--messenger-bubble-other);
-  color: var(--messenger-text);
+  background: var(--messenger-bubble-other, #f0f2f5);
+  color: var(--messenger-text, #050505);
   border-bottom-left-radius: 4px;
 }
 
 .message-bubble.emoji-only {
   background: transparent !important;
-  font-size: 32px;
-  padding: 0;
+  font-size: 32px; padding: 0;
   animation: heartPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }
 
@@ -526,181 +482,117 @@ const resolveImageUrl = (url?: string | null) => {
   100% { transform: scale(1); }
 }
 
-/* Typing */
-.typing {
-  display: flex;
-  gap: 4px;
-  padding: 10px 14px;
-}
-
+.typing { display: flex; gap: 4px; padding: 10px 14px; }
 .dot {
-  width: 6px;
-  height: 6px;
-  background: var(--messenger-gray);
+  width: 6px; height: 6px;
+  background: var(--messenger-gray, #65676b);
   border-radius: 50%;
   animation: bounce 1.4s infinite ease-in-out;
 }
-
 .dot:nth-child(2) { animation-delay: 0.2s; }
 .dot:nth-child(3) { animation-delay: 0.4s; }
-
 @keyframes bounce {
   0%, 80%, 100% { transform: scale(0); }
   40%           { transform: scale(1); }
 }
 
-/* Placeholder avatars */
+/* Avatar placeholders */
 .header-avatar.placeholder,
 .intro-avatar.placeholder,
 .msg-avatar.placeholder {
-  background: #f0f2f5;
-  color: #65676b;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background: #f0f2f5; color: #65676b;
+  display: flex; align-items: center; justify-content: center;
   border-radius: 50%;
 }
-
 .header-avatar.placeholder { width: 36px; height: 36px; }
 .intro-avatar.placeholder  { width: 80px; height: 80px; }
 .msg-avatar.placeholder    { width: 28px; height: 28px; }
 
 /* ── Footer ───────────────────────────────────────────────────────────── */
+/*
+  position:fixed — completely outside the flex flow.
+  `bottom` is set dynamically via :style = keyboardHeight.
+  .chat-view stays inset:0 always. Zero reflow.
+*/
 .chat-footer {
-  /* relative to .chat-view */
+  position: fixed;
+  left: 0; right: 0;
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 8px 10px;
-  padding-bottom: max(10px, env(safe-area-inset-bottom));
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
   background: white;
-  border-top: 1px solid var(--messenger-light-gray);
+  border-top: 1px solid var(--messenger-light-gray, #e4e6eb);
   z-index: 30;
-  transition: bottom 0.0s; /* intentionally no transition — viewport events fire fast enough */
 }
 
-/* When keyboard is open, collapse safe-area padding (keyboard covers it) */
+/* Keyboard open → safe-area irrelevant, keyboard covers it */
 .chat-footer.keyboard-open {
   padding-bottom: 8px;
 }
 
-.footer-actions {
-  display: flex;
-  gap: 4px;
-  flex-shrink: 0;
-}
+.footer-actions { display: flex; gap: 4px; flex-shrink: 0; }
 
-/* Slide-out animation for media action buttons */
 .actions-slide-enter-active,
 .actions-slide-leave-active {
-  transition: opacity 0.15s ease, transform 0.15s ease, max-width 0.2s ease;
+  transition: opacity 0.15s ease, transform 0.15s ease, max-width 0.18s ease;
   overflow: hidden;
 }
-
 .actions-slide-enter-from,
-.actions-slide-leave-to {
-  opacity: 0;
-  transform: translateX(-8px);
-  max-width: 0;
-}
-
+.actions-slide-leave-to   { opacity: 0; transform: translateX(-6px); max-width: 0; }
 .actions-slide-enter-to,
-.actions-slide-leave-from {
-  opacity: 1;
-  transform: translateX(0);
-  max-width: 160px;
-}
+.actions-slide-leave-from { opacity: 1; transform: translateX(0);    max-width: 160px; }
 
 .action-btn {
-  background: transparent;
-  border: none;
-  color: var(--messenger-blue);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px;
-  border-radius: 50%;
+  background: transparent; border: none;
+  color: var(--messenger-blue, #0084ff);
+  cursor: pointer; display: flex;
+  align-items: center; justify-content: center;
+  padding: 4px; border-radius: 50%;
   -webkit-tap-highlight-color: transparent;
   transition: background 0.15s;
 }
-
-.action-btn:active {
-  background: var(--messenger-light-gray);
-}
-
-.collapse-toggle {
-  flex-shrink: 0;
-}
+.action-btn:active { background: var(--messenger-light-gray, #f0f2f5); }
 
 .input-container {
-  flex: 1;
-  min-width: 0;
-  background: var(--messenger-light-gray);
+  flex: 1; min-width: 0;
+  background: var(--messenger-light-gray, #f0f2f5);
   border-radius: 22px;
-  display: flex;
-  align-items: center;
-  padding: 0 10px;
-  gap: 6px;
-  transition: border-radius 0.2s;
+  display: flex; align-items: center;
+  padding: 0 10px; gap: 6px;
 }
 
 .input-container input {
-  flex: 1;
-  min-width: 0;
-  background: transparent;
-  border: none;
-  outline: none;
+  flex: 1; min-width: 0;
+  background: transparent; border: none; outline: none;
   padding: 9px 0;
-  font-size: 16px; /* 16px prevents iOS auto-zoom */
+  font-size: 16px; /* ≥16px prevents iOS auto-zoom */
   line-height: 1.3;
 }
 
 .emoji-btn {
-  background: transparent;
-  border: none;
-  color: var(--messenger-blue);
-  cursor: pointer;
-  flex-shrink: 0;
-  display: flex;
+  background: transparent; border: none;
+  color: var(--messenger-blue, #0084ff);
+  cursor: pointer; flex-shrink: 0; display: flex;
   -webkit-tap-highlight-color: transparent;
 }
 
-.send-btn,
-.heart-btn {
-  background: transparent;
-  border: none;
-  color: var(--messenger-blue);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  padding: 4px;
-  border-radius: 50%;
+.send-btn, .heart-btn {
+  background: transparent; border: none;
+  color: var(--messenger-blue, #0084ff);
+  cursor: pointer; display: flex;
+  align-items: center; justify-content: center;
+  flex-shrink: 0; padding: 4px; border-radius: 50%;
   -webkit-tap-highlight-color: transparent;
   transition: transform 0.15s ease, background 0.15s;
 }
-
 .send-btn:active,
-.heart-btn:active {
-  transform: scale(0.88);
-  background: var(--messenger-light-gray);
-}
+.heart-btn:active { transform: scale(0.88); background: var(--messenger-light-gray, #f0f2f5); }
 
-/* ── Transitions ──────────────────────────────────────────────────────── */
+/* ── Fade-slide ───────────────────────────────────────────────────────── */
 .fade-slide-enter-active,
-.fade-slide-leave-active {
-  transition: opacity 0.25s ease, transform 0.25s ease;
-}
-
-.fade-slide-enter-from {
-  opacity: 0;
-  transform: translateY(8px);
-}
-
-.fade-slide-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
-}
+.fade-slide-leave-active { transition: opacity 0.22s ease, transform 0.22s ease; }
+.fade-slide-enter-from   { opacity: 0; transform: translateY(6px); }
+.fade-slide-leave-to     { opacity: 0; transform: translateY(-6px); }
 </style>
