@@ -1,5 +1,11 @@
-// Service Worker for V-Edu Messenger
-// Handles background notifications via Web Push API
+/// <reference lib="webworker" />
+import { precacheAndRoute } from 'workbox-precaching';
+
+declare const self: ServiceWorkerGlobalScope & {
+  __WB_MANIFEST: any;
+};
+
+precacheAndRoute(self.__WB_MANIFEST);
 
 self.addEventListener('push', (event: any) => {
   const data = event.data ? event.data.json() : { title: 'Tin nhắn mới', body: 'Bạn có tin nhắn mới từ V-Edu' };
