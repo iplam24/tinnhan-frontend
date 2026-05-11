@@ -76,6 +76,11 @@ onMounted(async () => {
       keyboardHeight.value = hidden;
       isKeyboardOpen.value = hidden > 80;
 
+      // Force scroll window to top to prevent header from being pushed up
+      if (isKeyboardOpen.value) {
+        window.scrollTo(0, 0);
+      }
+
       if (isKeyboardOpen.value) scrollToBottom(true);
     };
     viewport.addEventListener('resize', handler);
