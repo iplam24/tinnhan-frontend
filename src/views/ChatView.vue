@@ -64,24 +64,25 @@ onMounted(async () => {
     chatStore.initWebSocket();
   }
 
-  // Keyboard detection
+  // Keyboard and Viewport handling
   const viewport = window.visualViewport;
   if (viewport) {
     const handler = () => {
-      const winH = window.innerHeight;
       const vpH = viewport.height;
       const vpTop = viewport.offsetTop;
-      const hidden = Math.max(0, winH - (vpTop + vpH));
 
-      keyboardHeight.value = hidden;
-      isKeyboardOpen.value = hidden > 80;
+      isKeyboardOpen.value = window.innerHeight - vpH > 80;
 
-      // Force scroll window to top to prevent header from being pushed up
-      if (isKeyboardOpen.value) {
-        window.scrollTo(0, 0);
+      const chatView = document.querySelector('.chat-view') as HTMLElement;
+      if (chatView) {
+        // Resize and reposition container to match visible area exactly
+        chatView.style.height = `${vpH}px`;
+        chatView.style.top = `${vpTop}px`;
       }
 
-      if (isKeyboardOpen.value) scrollToBottom(true);
+      if (isKeyboardOpen.value) {
+        scrollToBottom(true);
+      }
     };
     viewport.addEventListener('resize', handler);
     viewport.addEventListener('scroll', handler);
@@ -157,8 +158,7 @@ const resolveImageUrl = (url?: string | null) => {
   return `${origin}${cleanPath}`;
 };
 
-const FOOTER_H = 58;
-const messagesPaddingBottom = computed(() => `${FOOTER_H + keyboardHeight.value + 8}px`);
+const messagesPaddingBottom = computed(() => `10px`);
 </script>
 
 <template>
@@ -183,7 +183,6 @@ const messagesPaddingBottom = computed(() => `${FOOTER_H + keyboardHeight.value 
     <ChatFooter 
       v-model="newMessage"
       :is-keyboard-open="isKeyboardOpen"
-      :keyboard-height="keyboardHeight"
       @send="sendMessage"
       @send-heart="sendHeart"
       @typing="handleTyping"
@@ -194,10 +193,15 @@ const messagesPaddingBottom = computed(() => `${FOOTER_H + keyboardHeight.value 
 <style scoped>
 .chat-view {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   background: white;
   overflow: hidden;
+  /* Prevent browser from scrolling the window */
+  overscroll-behavior: none;
 }
 </style>

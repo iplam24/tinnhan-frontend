@@ -5,7 +5,6 @@ import { computed } from 'vue';
 const props = defineProps<{
   modelValue: string;
   isKeyboardOpen: boolean;
-  keyboardHeight: number;
 }>();
 
 const emit = defineEmits(['update:modelValue', 'send', 'sendHeart', 'typing']);
@@ -15,13 +14,11 @@ const message = computed({
   set: (val) => emit('update:modelValue', val)
 });
 
-const footerBottomStyle = computed(() => `${props.keyboardHeight}px`);
 </script>
 
 <template>
   <footer
     class="chat-footer"
-    :style="{ bottom: footerBottomStyle }"
     :class="{ 'keyboard-open': isKeyboardOpen }"
   >
     <transition name="actions-slide">
@@ -63,16 +60,16 @@ const footerBottomStyle = computed(() => `${props.keyboardHeight}px`);
 
 <style scoped>
 .chat-footer {
-  position: fixed;
-  left: 0; right: 0;
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 8px 10px;
-  padding-bottom: max(8px, env(safe-area-inset-bottom));
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
   background: white;
   border-top: 1px solid var(--messenger-light-gray, #e4e6eb);
   z-index: 30;
+  flex-shrink: 0;
 }
 
 .chat-footer.keyboard-open {
